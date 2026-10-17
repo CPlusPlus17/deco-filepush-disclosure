@@ -53,20 +53,33 @@ The UCR SecLab team publicly documented the `:20001 -> 127.0.0.1:20002` (`tmpsvr
   the extracted 1.5.0 userspace (`luci/controller/admin/mobile_app/iot_device`
   module, `inner_file_push`).
 
-## CVSS 3.1
+## Severity (CVSS v3.1 + v4.0)
+
+This is a **post-authentication, owner-privileged** escalation to root — not an
+unauth RCE — so it scores **High, not Critical**. Full rationale and the
+rejected inflations are in [`docs/cvss-analysis.md`](docs/cvss-analysis.md).
+
+**CVSS v3.1 — 7.2 (High):**
 
 ```
-AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H  →  9.9 Critical
+CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H   = 7.2 (High)
+CVSS:3.1/AV:A/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H   = 6.8 (Medium)   # if LAN-only
 ```
 
-Fallback positions if the vendor prefers a different scope:
+Decisive calls: **`PR:H`** (the owner / TP-Link-ID account is the device's
+administrative principal) and **`S:U`** (the handler already runs as root — no
+authority boundary is crossed). An earlier draft scored 9.9 via `PR:L` + `S:C`;
+both are rejected.
 
-| Vector variant | Score |
-|---|---|
-| `S:U` (Scope Unchanged) | 8.8 |
-| `PR:H` + `S:C` | 9.1 |
-| `PR:H` + `S:U` | 7.2 |
-| `AV:A` (LAN only) + `S:U` | 8.0 |
+**CVSS v4.0 — High** (confirm the exact decimal in the FIRST v4.0 calculator):
+
+```
+CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
+```
+
+The real-world risk — a stolen/reused TP-Link-ID password converting to
+persistent root across the whole mesh plus client-traffic MITM — belongs in the
+narrative, not in an inflated base vector.
 
 ## Proof of concept
 
