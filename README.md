@@ -71,15 +71,18 @@ administrative principal) and **`S:U`** (the handler already runs as root — no
 authority boundary is crossed). An earlier draft scored 9.9 via `PR:L` + `S:C`;
 both are rejected.
 
-**CVSS v4.0 — High** (confirm the exact decimal in the FIRST v4.0 calculator):
+**CVSS v4.0 — 8.6 (High):**
 
 ```
-CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
+CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N   = 8.6 (High)
+CVSS:4.0/AV:A/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N   = 8.5 (High)       # if LAN-only
+CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:L   = 9.3 (Critical)   # with Subsequent-System LAN/mesh impact
 ```
 
 The real-world risk — a stolen/reused TP-Link-ID password converting to
 persistent root across the whole mesh plus client-traffic MITM — belongs in the
-narrative, not in an inflated base vector.
+narrative (and the v4.0 `SC:H/SI:H/SA:L` Subsequent-System metrics), not in an
+inflated v3.1 base vector.
 
 ## Proof of concept
 

@@ -73,9 +73,10 @@ Net: a defensible **High ~7.2**, not Critical 9.9 — a ~2.7-point correction.
 
 ### Vector + score
 ```
-Primary:     CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
-Subsequent:  CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:L   (if "router → client traffic" argued)
-LAN-only:    CVSS:4.0/AV:A/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
+Primary:              CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N  = 8.6 (High)
+Subsequent:           CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:L  = 9.3 (Critical)  (if "router → client traffic" argued)
+LAN-only:             CVSS:4.0/AV:A/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N  = 8.5 (High)
+LAN-only+Subsequent:  CVSS:4.0/AV:A/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:L  = 9.3 (Critical)
 ```
 #### Equivalence-class derivation (primary vector; E:X, CR/IR/AR:X)
 v4.0 computes a MacroVector from six equivalence classes (EQ1–EQ6), then
@@ -90,29 +91,20 @@ interpolates within it. For the primary vector:
 | EQ5 | E | E:X → treated as Attacked | **0** |
 | EQ6 | CR/IR/AR × VC/VI/VA | CR:X=H ∧ VC:H | **0** |
 
-→ **MacroVector = `100200`.** Subsequent-impact variant (`SC:H`/`SI:H`) flips
+→ **MacroVector = `100200`.** Subsequent-impact variant (`SC:H`/`SI:H/SA:L`) flips
 EQ4 to level 1 → **`100100`**.
 
-#### Scores (band)
-- `100200` (primary) → **High**, estimated **~8.3–8.6**.
-- `100100` (subsequent-impact argued) → **High–Critical**, estimated **~8.9–9.3**.
-- LAN-only (`AV:A`) → same MacroVector `100200`, a notch lower via the
-  intra-macrovector interpolation → **~7.5–8.0 (High)**.
+#### Exact scores (FIRST CVSS v4.0 reference implementation)
+- `100200` (primary, `AV:N`, `SC:N/SI:N/SA:N`) → **`8.6 (High)`**.
+- `100100` (subsequent-impact argued, `AV:N`, `SC:H/SI:H/SA:L`) → **`9.3 (Critical)`**.
+- `100200` (LAN-only, `AV:A`, `SC:N/SI:N/SA:N`) → **`8.5 (High)`** (same MacroVector `100200`, 0.1 lower via intra-macrovector severity-distance interpolation because v4.0 puts both `AV:N/PR:H/UI:N` and `AV:A/PR:H/UI:N` in EQ1=1).
+- `100100` (LAN-only + subsequent-impact, `AV:A`, `SC:H/SI:H/SA:L`) → **`9.3 (Critical)`**.
 
-**Honesty note:** the equivalence-class derivation above is exact and reproducible.
-The *final decimal*, however, comes from the official 270-entry MacroVector table
-plus the severity-distance interpolation — data I will not reproduce from memory.
-Treat the figures above as a reasoned band and **confirm the exact decimal in the
-FIRST CVSS v4.0 calculator** (https://www.first.org/cvss/calculator/4-0) before
-quoting a precise number in the advisory. (Note: v4.0 does not differentiate
-`AV:N` vs `AV:A` at the MacroVector level — both are EQ1=1 here because `UI:N`
-alone satisfies the clause — so that distinction appears only in the interpolated
-decimal, not the MacroVector.)
-
-Why v4.0 ≠ the v3.1 7.2: v4.0 removes the `Scope` metric (so the old `S:C`
-trick is gone) but weights full vulnerable-system impact more heavily, so the
-primary vector tends to land a little **above** 7.2 while still **well below**
-the inflated 9.9 — unless you justify the subsequent-system (`SC/SI`) impact.
+Why v4.0 (`8.6 High`) ≠ the v3.1 (`7.2 High`): v4.0 removes the `Scope` metric
+(so the old `S:C` debate is gone) and weights full vulnerable-system compromise
+(`VC:H/VI:H/VA:H`) more accurately on the primary system (`8.6 High`), while
+providing dedicated Subsequent-System metrics (`SC/SI/SA`) to capture downstream
+LAN/mesh traffic compromise (`9.3 Critical`) explicitly.
 
 ## Real-world severity (prose — where the base score undersells)
 CVSS base is capped by `PR:H`, but the operational risk is higher than 7.2

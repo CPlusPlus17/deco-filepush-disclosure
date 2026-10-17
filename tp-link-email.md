@@ -55,7 +55,8 @@ the narrative below.
 
     CVSS v3.1:  7.2 (High)    CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
                 (6.8 Medium if reachability is LAN-only — AV:A)
-    CVSS v4.0:  High          CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
+    CVSS v4.0:  8.6 (High)    CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
+                (8.5 High if LAN-only — AV:A; 9.3 Critical with Subsequent-System impact SC:H/SI:H/SA:L)
 
 Full rationale, including why we reject the `S:C`/`PR:L` (9.9) scoring, is in the
 accompanying `docs/cvss-analysis.md`.

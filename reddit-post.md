@@ -50,10 +50,10 @@ Zero path validation, zero directory confinement, and `error_code = 0` returned 
 3. **Persistent Flash (`/tp_data/user_data`):** Mounted `rw,sync` UBIFS (`ubi2:ubi_runtime_data`). Writes survive reboots. We also traced `luci/sys/config.lua` + `luci/model/crypto.lua`, extracted the `libtrkutil` AES-256-CBC key/IV, and decrypted all 14 encrypted NVRAM config blobs (`zlib` + `AES-256-CBC` XML) offline.
 4. **Arbitrary `root` Command Execution (`io.popen`):** By pushing a modified LuCI dispatch entry to `/tmp/luci-indexcache` via `0xC456` and triggering a single unauthenticated `GET /cgi-bin/luci`, `uhttpd` executes arbitrary Lua/shell commands as `uid=0(root)` (verified with byte-exact cache restoration afterward).
 
-### CVSS Assessment (High — 7.2 in v3.1 / High in v4.0)
+### CVSS Assessment (High — 7.2 in v3.1 / 8.6 in v4.0)
 ```text
 CVSS v3.1: 7.2 (High)  CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H  (6.8 Medium if LAN-only AV:A)
-CVSS v4.0: High        CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
+CVSS v4.0: 8.6 (High)  CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N  (8.5 High if AV:A; 9.3 Critical with SC:H/SI:H/SA:L)
 ```
 *(Full scoring rationale — including why we score owner credentials as `PR:H` and `tmpsvr` already running as `root` as `S:U` rather than an inflated 9.9 `S:C`/`PR:L`, and why the operational risk of a single reused TP-Link ID password remains severe — is in [`docs/cvss-analysis.md`](https://github.com/CPlusPlus17/deco-filepush-disclosure/blob/main/docs/cvss-analysis.md)).*
 
