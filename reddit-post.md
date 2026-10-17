@@ -50,11 +50,12 @@ Zero path validation, zero directory confinement, and `error_code = 0` returned 
 3. **Persistent Flash (`/tp_data/user_data`):** Mounted `rw,sync` UBIFS (`ubi2:ubi_runtime_data`). Writes survive reboots. We also traced `luci/sys/config.lua` + `luci/model/crypto.lua`, extracted the `libtrkutil` AES-256-CBC key/IV, and decrypted all 14 encrypted NVRAM config blobs (`zlib` + `AES-256-CBC` XML) offline.
 4. **Arbitrary `root` Command Execution (`io.popen`):** By pushing a modified LuCI dispatch entry to `/tmp/luci-indexcache` via `0xC456` and triggering a single unauthenticated `GET /cgi-bin/luci`, `uhttpd` executes arbitrary Lua/shell commands as `uid=0(root)` (verified with byte-exact cache restoration afterward).
 
-### CVSS v3.1 Assessment
+### CVSS Assessment (High — 7.2 in v3.1 / High in v4.0)
 ```text
-CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H  ->  9.9 Critical
+CVSS v3.1: 7.2 (High)  CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H  (6.8 Medium if LAN-only AV:A)
+CVSS v4.0: High        CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N
 ```
-*(Conservative alternatives depending on whether Scope is scored Unchanged or Owner is scored `PR:H`: **8.8 High** `S:U`, **9.1 Critical** `PR:H/S:C`, or **7.2 High** `PR:H/S:U` — full rationale in [`docs/cvss-analysis.md`](https://github.com/CPlusPlus17/deco-filepush-disclosure/blob/main/docs/cvss-analysis.md)).*
+*(Full scoring rationale — including why we score owner credentials as `PR:H` and `tmpsvr` already running as `root` as `S:U` rather than an inflated 9.9 `S:C`/`PR:L`, and why the operational risk of a single reused TP-Link ID password remains severe — is in [`docs/cvss-analysis.md`](https://github.com/CPlusPlus17/deco-filepush-disclosure/blob/main/docs/cvss-analysis.md)).*
 
 ### Why Immediate Public Release? (2 Years Unfixed + Preventing E-Waste)
 1. **TP-Link already had two years since CCS'24 / Black Hat '24:** Instead of hardening `tmpsvr`, they only bumped the RSA key size from 512-bit to 2048-bit and left `0xC456`, `0x00F0`, and `0xC505` wide open in the 2026 firmware. Waiting quietly any longer only leaves Deco owners in the dark.
@@ -86,7 +87,7 @@ https://github.com/CPlusPlus17/deco-filepush-disclosure
 1. **`claude` (Anthropic Claude, hosted — 11 entries):** Probed Dropbear SSH on `:20001`, confirmed interactive shell channels (`session`) are rejected while `direct-tcpip` port forwarding to `127.0.0.1:20002` (`tmpsvr`) is allowed, and audited the decompiled Lua controllers to flag `0xC456` (`inner_file_push`) as a potential write primitive.
 2. **`codex` (OpenAI Codex, hosted — 49 entries):** Decrypted and RSA-PSS-verified the `1.5.0` firmware image offline, unpacked the SquashFS rootfs, recovered the 555-entry native `tmpsvr` opcode table, decompiled the Lua 5.1 bytecode, and built a safety-locked RAM-only trial harness (with 120s/900s auto-revert watchdogs and byte-exact `/tmp/luci-indexcache` restoration) to test VLAN 30 across all three physical mesh units.
 3. **`gemini` (Google Gemini, hosted — 5 entries):** Traced the stock OpenWrt init/hotplug scripts (`guest-eth.sh`, `apsd`, `iot_network`, `wificommon.sh`), proved why flipping `iot_wifi.iot.vlan_enable=1` in UCI is a 100% no-op (`iot_eth.sh` was omitted from the firmware) and why Guest VLAN tagging is gated off in `AP` mode (`ports '6t'` only), and decompiled `luci/sys/config.lua` + `luci/model/crypto.lua` (`zlib` + `AES-256-CBC` + `libtrkutil`).
-4. **`hermes` (**Qwen**, open-weight running in the Hermes harness — 6 entries + cross-lane orchestration):** Executed the live `0xC456` write proofs across `/www/log_export`, `/etc/config`, and persistent `/tp_data/user_data` UBIFS flash, verified `root` command execution via `io.popen`, extracted the live `libtrkutil` AES-256-CBC key/IV, decrypted all 14 NVRAM config dumps offline, and wrote the standalone PoC and CVSS 9.9 disclosure package.
+4. **`hermes` (**Qwen**, open-weight running in the Hermes harness — 6 entries + cross-lane orchestration):** Executed the live `0xC456` write proofs across `/www/log_export`, `/etc/config`, and persistent `/tp_data/user_data` UBIFS flash, verified `root` command execution via `io.popen`, extracted the live `libtrkutil` AES-256-CBC key/IV, decrypted all 14 NVRAM config dumps offline, and wrote the standalone PoC and CVSS disclosure package.
 
 ### Why Open-Weight Models (Qwen / Hermes) Were Essential
 The biggest practical lesson from this session was **what happens when you do legitimate hardware research on your own home router using only commercial APIs**:
