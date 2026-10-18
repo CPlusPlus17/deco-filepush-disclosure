@@ -1,8 +1,14 @@
 # Deco XE75 Pro V3 — owner-authenticated debug channel: arbitrary root file write
 
+> Companion VLAN project: experimental fixed-VLAN-30 source alpha for the exact
+> XE75 Pro V3 firmware/profile. It requires operator-supplied stock files and
+> has no general installer or flashable image. Guest VLAN 591 remains unresolved;
+> final three-unit cold-boot, UI and client-isolation acceptance is incomplete.
+> See [current status](https://github.com/CPlusPlus17/deco-iot-vlan/blob/main/docs/STATUS.md).
+
+
 Research disclosure, **TP-Link Deco XE75 Pro V3**, firmware **1.5.0 Build
-20260603 Rel.15804**. Reported to `security@tp-link.com` and released
-publicly alongside our 802.1Q IoT VLAN implementation ([deco-iot-vlan](https://github.com/CPlusPlus17/deco-iot-vlan)).
+20260603 Rel.15804**. Prepared for `security@tp-link.com` and public release alongside our 802.1Q IoT VLAN implementation ([deco-iot-vlan](https://github.com/CPlusPlus17/deco-iot-vlan)).
 
 ## Summary
 
@@ -37,9 +43,9 @@ All four steps were executed and reverted on the owner's own main unit.
 
 The UCR SecLab team publicly documented the `:20001 -> 127.0.0.1:20002` (`tmpsvr`) debug channel **two years ago** in **CCS 2024 — "Untangling the Knot: Breaking Access Control in Home Wireless Mesh Networks"** (and Black Hat USA 2024 — "Fallen Tower of Babel"). Their entry point on older Deco models (X55, FW 1.2.2) was **factoring 512-bit RSA hostkeys** and abusing unvalidated `tmpsvr` handlers.
 
-**TP-Link had two full years (2024 → June 2026, FW `1.5.0 Build 20260603`) to audit and lock down `tmpsvr`. Instead, they only applied a superficial band-aid:**
-- They increased the `ssh-rsa` hostkey size from 512-bit to **2048-bit** (one shared factory key across all three mesh units, `SHA256:9feb3ac4...932a36`, plus per-unit `ecdsa-sha2-nistp521`), closing only the 512-bit factorization headline from the 2024 talk.
-- **They left the underlying `root` handlers in `tmpsvr` completely untouched in 2026 firmware `1.5.0`:**
+**Observed differences and remaining handlers on this exact firmware:**
+- They increased the `ssh-rsa` hostkey size from 512-bit to **2048-bit** (one shared observed key across all three mesh units, `SHA256:9feb3ac4...932a36`, plus per-unit `ecdsa-sha2-nistp521`), closing the 512-bit factorization path from the 2024 talk.
+- **The following root-level handlers are present in firmware `1.5.0`:**
   1. **Password auth on `:20001` (`svr_auth_uci`)** remains active using `SHA1(owner_email)` + the shared TP-Link ID password.
   2. **Opcode `0xC456` (`inner_file_push`)** still opens any caller-supplied path in `"w"` mode as `root` with zero path validation.
   3. **Opcode `0x00F0`** still reads any file on the filesystem as `root`.
@@ -55,11 +61,15 @@ The UCR SecLab team publicly documented the `:20001 -> 127.0.0.1:20002` (`tmpsvr
 
 ## Severity (CVSS v3.1 + v4.0)
 
+Only LAN reachability has been demonstrated. For the observed LAN-only profile
+we use the AV:A variants: v3.1 6.8 / v4.0 8.5. AV:N scores below are conditional
+on a demonstrated network path; cloud reachability is unverified.
+
 This is a **post-authentication, owner-privileged** escalation to root — not an
-unauth RCE — so it scores **High, not Critical**. Full rationale and the
+unauth RCE — the observed-profile scores below are 6.8 (v3.1) and 8.5 (v4.0). Full rationale and the
 rejected inflations are in [`docs/cvss-analysis.md`](docs/cvss-analysis.md).
 
-**CVSS v3.1 — 7.2 (High):**
+**CVSS v3.1 — LAN-only assessment 6.8 (Medium); conditional remote variant 7.2 (High):**
 
 ```
 CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H   = 7.2 (High)
@@ -71,7 +81,7 @@ administrative principal) and **`S:U`** (the handler already runs as root — no
 authority boundary is crossed). An earlier draft scored 9.9 via `PR:L` + `S:C`;
 both are rejected.
 
-**CVSS v4.0 — 8.6 (High):**
+**CVSS v4.0 — LAN-only assessment 8.5 (High); conditional remote variant 8.6 (High):**
 
 ```
 CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N   = 8.6 (High)
@@ -87,13 +97,17 @@ inflated v3.1 base vector.
 ## Proof of concept
 
 `poc/deco_filepush_poc.py` — self-contained (stdlib + paramiko). Credentials
-via `DECO_EMAIL` / `DECO_PASSWORD` env vars only.
+via `DECO_EMAIL` / `DECO_PASSWORD` env vars only. Live modes require
+`DECO_HOSTKEY`, verified independently: raw base64, a public-key line, or one
+`ssh-keyscan` key line (comments supported). A scan alone does not authenticate
+the device. The HTTPS check compares served bytes but does not verify its certificate.
+Exactly one mode is required; failed verification exits nonzero.
 
 ```
 python3 poc/deco_filepush_poc.py --selftest        # offline framing sanity
-DECO_EMAIL=you@example.com DECO_PASSWORD=*** \
+DECO_EMAIL=you@example.com DECO_PASSWORD=*** DECO_HOSTKEY="$TRUSTED_DECO_HOSTKEY" \
   python3 poc/deco_filepush_poc.py --run           # write marker + readback + HTTPS check
-DECO_EMAIL=you@example.com DECO_PASSWORD=*** \
+DECO_EMAIL=you@example.com DECO_PASSWORD=*** DECO_HOSTKEY="$TRUSTED_DECO_HOSTKEY" \
   python3 poc/deco_filepush_poc.py --cleanup <nonce>   # overwrite marker with empty content
 ```
 
@@ -141,7 +155,7 @@ We chose to release both this security advisory and the companion VLAN implement
 - `poc/deco_filepush_poc.py` — self-contained PoC
 - `docs/cvss-analysis.md` — scoring rationale + fallback matrix
 - `docs/handler-source.md` — decompiled `inner_file_push` handler + references
-- `tp-link-email.md` — the report sent to security@tp-link.com
+- `tp-link-email.md` — draft vendor report; delivery unverified
 - `reddit-post.md` — community post drafts
 
 ## Credit

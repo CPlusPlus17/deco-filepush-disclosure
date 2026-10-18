@@ -1,5 +1,15 @@
 # Ready-to-Post Reddit Drafts
 
+> Companion VLAN project: experimental fixed-VLAN-30 source alpha for the exact
+> XE75 Pro V3 firmware/profile. It requires operator-supplied stock files and
+> has no general installer or flashable image. Guest VLAN 591 remains unresolved;
+> final three-unit cold-boot, UI and client-isolation acceptance is incomplete.
+> See [current status](https://github.com/CPlusPlus17/deco-iot-vlan/blob/main/docs/STATUS.md).
+
+> Reachability: LAN demonstrated; cloud/remote path unverified. Current
+> LAN-only assessment: CVSS v3.1 6.8 / v4.0 8.5. AV:N scores are conditional.
+
+
 This file contains four tailored drafts ready for copy-pasting depending on the subreddit:
 1. **`r/netsec` / `r/ReverseEngineering` / `r/hardwarehacking`** — Technical advisory & firmware reverse-engineering focus
 2. **`r/LocalLLaMA`** — Multi-agent reverse engineering (`agents.comm`) & why open-weight models (**Qwen** via **Hermes**) were essential when commercial APIs (**Opus 4.8 / 5.5**, etc.) became unusable due to overly strict filter rules
@@ -13,7 +23,7 @@ This file contains four tailored drafts ready for copy-pasting depending on the 
 > **Tip for `r/netsec`:** Submit as a **Link Post** pointing to `https://github.com/CPlusPlus17/deco-filepush-disclosure` and paste the text below as the top-level summary comment. For `r/ReverseEngineering` and `r/hardwarehacking`, submit directly as a **Text Post**.
 
 **Title:**
-`[TP-Link Deco XE75 Pro V3] Two years after CCS'24 / Black Hat '24, TP-Link only bumped the RSA key size — Port 20001 -> tmpsvr still gives Arbitrary Root File Write (0xC456) & RCE on 2026 Firmware 1.5.0`
+`[TP-Link Deco XE75 Pro V3] Two years after CCS'24 / Black Hat '24, Root file-write handler remains present — Port 20001 -> tmpsvr still gives Arbitrary Root File Write (0xC456) & RCE on 2026 Firmware 1.5.0`
 
 **Body:**
 **Repository (Write-up, Decompiled Handlers, Self-Contained PoC, Multi-Agent Log):**
@@ -21,7 +31,7 @@ https://github.com/CPlusPlus17/deco-filepush-disclosure
 
 **TL;DR:** Two years ago (CCS 2024 *"Untangling the Knot"* / Black Hat USA 2024), UCR SecLab researchers publicly disclosed that TP-Link Deco routers expose an internal `tmpsvr` service (`127.0.0.1:20002`) via SSH port forwarding on TCP port `20001` with unvalidated `root` handlers.
 
-**TP-Link had two full years (2024 → June 2026, Firmware `1.5.0 Build 20260603 Rel. 15804`) to audit and fix `tmpsvr`. Instead, they only applied a cosmetic band-aid:** they bumped the SSH RSA hostkey from 512-bit to 2048-bit (to stop the 512-bit factorization headline from the 2024 talk) and **left the underlying `root` handlers inside `tmpsvr` completely untouched**:
+**On this exact firmware we observed 2048-bit RSA host keys and the following root-level handlers. This is not a complete comparison of vendor fixes since 2024:**
 - **Password auth on `:20001` (`svr_auth_uci`)** is still open (`username = SHA1(owner_email)`, `password = TP-Link ID password`).
 - **Opcode `0xC456` (`inner_file_push`)** still opens any caller-supplied path in `"w"` mode and writes arbitrary content verbatim as `root` (`uid=0`) — zero path allowlist, zero traversal check.
 - **Opcode `0x00F0`** still reads any file on the device as `root`.
@@ -50,7 +60,7 @@ Zero path validation, zero directory confinement, and `error_code = 0` returned 
 3. **Persistent Flash (`/tp_data/user_data`):** Mounted `rw,sync` UBIFS (`ubi2:ubi_runtime_data`). Writes survive reboots. We also traced `luci/sys/config.lua` + `luci/model/crypto.lua`, extracted the `libtrkutil` AES-256-CBC key/IV, and decrypted all 14 encrypted NVRAM config blobs (`zlib` + `AES-256-CBC` XML) offline.
 4. **Arbitrary `root` Command Execution (`io.popen`):** By pushing a modified LuCI dispatch entry to `/tmp/luci-indexcache` via `0xC456` and triggering a single unauthenticated `GET /cgi-bin/luci`, `uhttpd` executes arbitrary Lua/shell commands as `uid=0(root)` (verified with byte-exact cache restoration afterward).
 
-### CVSS Assessment (High — 7.2 in v3.1 / 8.6 in v4.0)
+### CVSS Assessment (LAN-only profile: 6.8 v3.1 / 8.5 v4.0; remote variants conditional)
 ```text
 CVSS v3.1: 7.2 (High)  CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H  (6.8 Medium if LAN-only AV:A)
 CVSS v4.0: 8.6 (High)  CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N  (8.5 High if AV:A; 9.3 Critical with SC:H/SI:H/SA:L)
@@ -58,10 +68,10 @@ CVSS v4.0: 8.6 (High)  CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:N/SI:
 *(Full scoring rationale — including why we score owner credentials as `PR:H` and `tmpsvr` already running as `root` as `S:U` rather than an inflated 9.9 `S:C`/`PR:L`, and why the operational risk of a single reused TP-Link ID password remains severe — is in [`docs/cvss-analysis.md`](https://github.com/CPlusPlus17/deco-filepush-disclosure/blob/main/docs/cvss-analysis.md)).*
 
 ### Why Immediate Public Release? (2 Years Unfixed + Preventing E-Waste)
-1. **TP-Link already had two years since CCS'24 / Black Hat '24:** Instead of hardening `tmpsvr`, they only bumped the RSA key size from 512-bit to 2048-bit and left `0xC456`, `0x00F0`, and `0xC505` wide open in the 2026 firmware. Waiting quietly any longer only leaves Deco owners in the dark.
+1. **TP-Link already had two years since CCS'24 / Black Hat '24:** In the tested firmware we observed 2048-bit RSA host keys alongside the `0xC456`, `0x00F0`, and `0xC505` handlers in this firmware; this is not a complete audit of intervening fixes. Waiting quietly any longer only leaves Deco owners in the dark.
 2. **Preventing e-waste & right to network security:** We started this project today with one defensive goal: isolating untrusted IoT devices onto a tagged VLAN on our 3-unit Deco XE75 Pro V3 mesh. On stock firmware `1.5.0`, that basic security feature is artificially withheld (`/lib/iot_network/iot_eth.sh` is omitted and the VLAN setup in `iot_network` is commented out). That left us with a choice: **either turn three completely capable Wi-Fi 6E routers into e-waste and throw them away, or reverse-engineer the firmware and patch the missing security feature in ourselves.**
 
-We are releasing both the security advisory and our 802.1Q IoT VLAN implementation ([deco-iot-vlan](https://github.com/CPlusPlus17/deco-iot-vlan)) publicly so every Deco owner can (1) immediately take defensive precautions around port `20001` and their TP-Link ID password, and (2) equip their own Decos with proper VLAN segmentation instead of throwing working hardware away.
+We are releasing both the security advisory and our experimental 802.1Q IoT VLAN source alpha ([deco-iot-vlan](https://github.com/CPlusPlus17/deco-iot-vlan) — fixed VLAN 30 for this exact XE75 Pro V3 1.5.0 profile; requires operator-supplied stock files, Guest VLAN 591 and final three-unit cold-boot/UI/isolation acceptance remain open) publicly so every Deco owner can (1) immediately take defensive precautions around port `20001` and their TP-Link ID password, and (2) inspect or build the VLAN segmentation work instead of throwing working hardware away.
 
 Full technical write-up, decompiled Lua handlers, standalone Python PoC (`--selftest` offline mode included), and our multi-agent reverse-engineering breakdown (`TEAM-SUMMARY.md`) are in the repo:
 https://github.com/CPlusPlus17/deco-filepush-disclosure
@@ -78,7 +88,7 @@ Today I had a simple choice with my 3-unit **TP-Link Deco XE75 Pro V3** mesh (ru
 
 I spun up a 4-agent reverse-engineering session coordinated through a single shared append-only text file (`agents.comm`, 1,346 lines / 75+ entries) to audit the firmware and find a way in.
 
-By the end of the afternoon, the team had decrypted the firmware offline, discovered that **two years after the 2024 Black Hat / CCS Deco disclosure TP-Link had only bumped the RSA key size while leaving `tmpsvr` wide open**, found an unvalidated `root` arbitrary file-write primitive (`0xC456` `inner_file_push`) reachable over port `:20001`, achieved `root` command execution, decrypted the router's AES-256-CBC flash config partitions, got 802.1Q VLAN 30 working across all three mesh units ([deco-iot-vlan](https://github.com/CPlusPlus17/deco-iot-vlan)), and packaged a full vulnerability disclosure repo ([deco-filepush-disclosure](https://github.com/CPlusPlus17/deco-filepush-disclosure)).
+By the end of the afternoon, the team had decrypted the firmware offline, discovered that **two years after the 2024 Black Hat / CCS Deco disclosure 2048-bit RSA host keys coexist with the root file-write handler**, found an unvalidated `root` arbitrary file-write primitive (`0xC456` `inner_file_push`) reachable over port `:20001` on the LAN, achieved `root` command execution, decrypted the router's AES-256-CBC flash config partitions, built an experimental fixed-VLAN-30 source alpha ([deco-iot-vlan](https://github.com/CPlusPlus17/deco-iot-vlan); warm-tested across all three units, with Guest VLAN 591 and final three-unit cold-boot/UI/isolation acceptance still open), and packaged a full vulnerability disclosure repo ([deco-filepush-disclosure](https://github.com/CPlusPlus17/deco-filepush-disclosure)).
 
 **Full Disclosure Repo (including `TEAM-SUMMARY.md` and the standalone PoC):**
 https://github.com/CPlusPlus17/deco-filepush-disclosure
@@ -118,16 +128,16 @@ After decrypting and unpacking the `1.5.0` SquashFS rootfs:
 
 ### 2. How We Got Root Without UART — 2 Years After CCS'24 / Black Hat '24, `tmpsvr` Is Still Wide Open
 Two years ago (CCS 2024 / Black Hat USA 2024), researchers showed that every Deco unit listens on **TCP port `20001`** (Dropbear SSH) and tunnels to `127.0.0.1:20002` (`tmpsvr`).
-- **TP-Link had two years (2024 → June 2026) to secure `tmpsvr`.** All they did in firmware `1.5.0` was bump the SSH RSA key size from 512-bit to 2048-bit, while leaving password authentication (`SHA1(your_tplink_email)` + your TP-Link ID password) and the underlying `root` handlers completely untouched!
+- **TP-Link had two years (2024 → June 2026) to secure `tmpsvr`.** On this firmware we observed 2048-bit RSA host keys, password authentication (`SHA1(your_tplink_email)` + your TP-Link ID password) reachable from the LAN, and the handlers described below. We have not audited every vendor change since 2024.
 - On `tmpsvr`, opcode `0x00F0` still reads any file as `root`, opcode **`0xC456` (`inner_file_push`) still writes any file to any path as `root`** (`io.open(params.file, "w")`, zero path validation), and even the 2024 `tty2tcp` (`0xC505`) shell injection handler is still unfixed in the code.
 - From `0xC456`, swapping `/tmp/luci-indexcache` gives full `root` Lua / shell execution (`io.popen`), and we were able to create a dedicated `br-iot` bridge (`eth1.30` + `ath08` 2.4GHz IoT VAP + `ath18` 5GHz IoT VAP + `switch1` VLAN 30 on `2t 6t`) across all three mesh units talking directly to OPNsense (`192.168.30.1`).
 
 ### 3. Why Public Release & Repositories
-Because TP-Link already had two years since the 2024 disclosure and only increased the RSA key length while leaving `tmpsvr` unfixed, we are releasing both repositories publicly so that every Deco owner has the chance to (a) take immediate defensive precautions around port `20001` and their TP-Link ID password, and (b) equip their existing Decos with proper 802.1Q VLAN segmentation instead of replacing working hardware:
-- **802.1Q IoT VLAN Runtime & Native Web-UI (`deco-iot-vlan`):** https://github.com/CPlusPlus17/deco-iot-vlan
+Because TP-Link already had two years since the 2024 disclosure and the described handlers remain present in the tested firmware, we are releasing both repositories publicly so that every Deco owner has the chance to (a) take immediate defensive precautions around port `20001` and their TP-Link ID password, and (b) inspect or build the experimental fixed-VLAN-30 source alpha for their own XE75 Pro V3 (`1.5.0`) instead of replacing working hardware:
+- **802.1Q IoT VLAN Runtime & Native Web-UI (`deco-iot-vlan`, experimental source alpha — requires operator-supplied stock files; Guest VLAN 591 and final three-unit cold-boot/UI/isolation acceptance remain open):** https://github.com/CPlusPlus17/deco-iot-vlan
 - **Security Advisory & PoC (`deco-filepush-disclosure`):** https://github.com/CPlusPlus17/deco-filepush-disclosure
 
-**Quick takeaway for Deco owners:** Make sure your TP-Link ID password is unique (never reused anywhere else) and restrict TCP port `20001`, because on 1.5.0 that port still exposes full `root` file read/write.
+**Quick takeaway for Deco owners:** Make sure your TP-Link ID password is unique (never reused anywhere else) and restrict TCP port `20001`, because on 1.5.0 that port still exposes full `root` file read/write on the LAN.
 
 ---
 
@@ -150,10 +160,9 @@ Here are the two main findings from our audit, released publicly so every Deco o
 
 2. **Security Note on TCP Port `20001` (Still unfixed 2 years after CCS 2024 / Black Hat 2024):**
    - Two years ago (CCS 2024 / Black Hat 2024), security researchers disclosed that Deco units expose an internal SSH service on TCP port `20001` that tunnels to `127.0.0.1:20002` (`tmpsvr`).
-   - Despite having **two years (2024 → June 2026)** to harden `tmpsvr`, firmware `1.5.0` only bumped the SSH RSA key size from 512-bit to 2048-bit. It left password authentication (`SHA1(owner_email)` + your TP-Link account password) and the underlying `root` handlers untouched: opcode `0xC456` (`inner_file_push`) still writes arbitrary files to any path as `root` without an allowlist, `0x00F0` reads any file as `root`, and even `0xC505` (`tty2tcp`) remains unvalidated.
-   - We have sent a full report to `security@tp-link.com`. Because two years have already passed since the original 2024 disclosure without `tmpsvr` being locked down, **make sure your TP-Link ID uses a strong, unique password** and never expose port `20001` to the WAN or untrusted VLANs.
+   - Despite having **two years (2024 → June 2026)** to harden `tmpsvr`, firmware `1.5.0` has 2048-bit RSA host keys. We also observed password authentication (`SHA1(owner_email)` + your TP-Link account password) on the LAN and the underlying `root` handlers described below: opcode `0xC456` (`inner_file_push`) still writes arbitrary files to any path as `root` without an allowlist, `0x00F0` reads any file as `root`, and even `0xC505` (`tty2tcp`) remains unvalidated.
+   - A report is prepared for `security@tp-link.com`; vendor delivery is not verified in this repository. Because two years have already passed since the original 2024 disclosure without `tmpsvr` being locked down, **make sure your TP-Link ID uses a strong, unique password** and never expose port `20001` to the WAN or untrusted VLANs.
 
 Full technical details, VLAN implementation, and firmware analysis:
-- IoT VLAN Tagging & Native Web-UI: https://github.com/CPlusPlus17/deco-iot-vlan
+- IoT VLAN Tagging & Native Web-UI (experimental fixed-VLAN-30 source alpha for XE75 Pro V3 `1.5.0`; requires operator-supplied stock files, Guest VLAN 591 and final three-unit cold-boot/UI/isolation acceptance open): https://github.com/CPlusPlus17/deco-iot-vlan
 - Security Advisory (`0xC456` Root File Write): https://github.com/CPlusPlus17/deco-filepush-disclosure
-

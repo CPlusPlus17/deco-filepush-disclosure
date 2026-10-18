@@ -1,5 +1,12 @@
 # How this was found — team summary
 
+> Companion VLAN project: experimental fixed-VLAN-30 source alpha for the exact
+> XE75 Pro V3 firmware/profile. It requires operator-supplied stock files and
+> has no general installer or flashable image. Guest VLAN 591 remains unresolved;
+> final three-unit cold-boot, UI and client-isolation acceptance is incomplete.
+> See [current status](https://github.com/CPlusPlus17/deco-iot-vlan/blob/main/docs/STATUS.md).
+
+
 This disclosure is the product of a multi-agent reverse-engineering
 session run by the owner on 2026-10-17 (one day, CEST) against their own
 TP-Link Deco XE75 Pro V3 mesh (3 units: `192.168.68.1`, `192.168.68.2`, `192.168.68.3`).

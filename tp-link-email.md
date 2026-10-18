@@ -1,17 +1,27 @@
-# Report to TP-Link Security (coordinated disclosure)
+# Draft report to TP-Link Security — delivery unverified
+
+> Companion VLAN project: experimental fixed-VLAN-30 source alpha for the exact
+> XE75 Pro V3 firmware/profile. It requires operator-supplied stock files and
+> has no general installer or flashable image. Guest VLAN 591 remains unresolved;
+> final three-unit cold-boot, UI and client-isolation acceptance is incomplete.
+> See [current status](https://github.com/CPlusPlus17/deco-iot-vlan/blob/main/docs/STATUS.md).
+
+> Reachability: LAN demonstrated; cloud/remote path unverified. Current
+> LAN-only assessment: CVSS v3.1 6.8 / v4.0 8.5. AV:N scores are conditional.
+
 
 To: security@tp-link.com
 Cc: <your email — optional>
-Date: 2026-10-17
+Date: fill in the actual delivery date
 Subject: [Security Vulnerability Disclosure] Deco XE75 Pro V3 (FW 1.5.0 Build 20260603 Rel.15804) — owner-authenticated debug channel: arbitrary root file write (inner_file_push, opcode 0xC456)
 
 Dear TP-Link Security Team,
 
 I am reporting a vulnerability in the Deco XE75 Pro V3 (firmware 1.5.0 Build
 20260603 Rel.15804), found during owner-driven reverse engineering on my own
-3-unit mesh. A proof-of-concept and write-up are prepared; I am notifying you
-concurrently with public (full / 0-day) disclosure (see "Disclosure timeline"
-below). This report contains no credentials or secrets.
+3-unit mesh. A proof-of-concept and write-up are prepared; this draft is for
+vendor notification alongside the planned public disclosure (see "Disclosure
+timeline" below). This report contains no credentials or secrets.
 
 ## Summary
 The owner-authenticated debug SSH channel (Dropbear on TCP 20001, direct-tcpip
@@ -47,10 +57,10 @@ the entire root filesystem, which on a router is the whole device.
 - The LuCI route cache can be swapped with Lua and triggered via `GET
   /cgi-bin/luci` → root Lua → `io.popen` → arbitrary root binary execution.
 
-## CVSS (honest assessment — High, not Critical)
+## CVSS (observed profile and conditional variants)
 This is a **post-authentication, owner-privileged** escalation to root (`PR:H`),
-and the vulnerable handler **already runs as root** (`S:U`) — so it scores High,
-not Critical. The operational risk is nonetheless significant and is argued in
+and the vulnerable handler **already runs as root** (`S:U`). The observed LAN-only profile is 6.8 (Medium) in v3.1
+and 8.5 (High) in v4.0. The operational risk is nonetheless significant and is argued in
 the narrative below.
 
     CVSS v3.1:  7.2 (High)    CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
@@ -73,7 +83,7 @@ documented this exact `:20001 → 127.0.0.1:20002` (`tmpsvr`) debug channel and
 demonstrated root compromise on older Deco models by factoring 512-bit RSA
 hostkeys and abusing unvalidated `tmpsvr` handlers.
 
-In 1.5.0 the hostkeys were bumped to 2048-bit RSA (one shared factory key across
+In 1.5.0 the hostkeys were bumped to 2048-bit RSA (one shared observed key across
 all three of my units, `SHA256:9feb3ac47a4a08ce7fe8a104c8b024cdfb438315ec9f6d6eec2980537c932a36`,
 plus per-unit `ecdsa-sha2-nistp521`), which closes the 512-bit factorization
 path. However, the underlying root-level handlers appear unchanged:
@@ -117,19 +127,21 @@ path. However, the underlying root-level handlers appear unchanged:
 enable 802.1Q IoT VLAN tagging in AP mode, so owners are not pushed to patch
 basic network segmentation themselves.
 
-## Reproduction / PoC (published)
-A self-contained PoC (`poc/deco_filepush_poc.py`) is included in the published
+## Reproduction / PoC (prepared)
+A self-contained PoC (`poc/deco_filepush_poc.py`) is included in the disclosure
 repository. It takes credentials only via environment variables, writes
 a single inert marker to `/www/log_export` (ramfs), requires byte-exact readback
 via the device's own `0xF0` read, and confirms unmodified HTTPS serving. I can
 provide the full decompiled module and the TMPv2 framing derivation on request.
 
 ## Disclosure timeline
+Draft only: actual vendor delivery and public-release timestamps must be recorded after those actions. No delivery receipt is included here.
+
 This is a full (0-day) disclosure: the write-up, PoC, and companion project are
-published publicly concurrently with this report. The `tmpsvr` debug channel and
+planned for public release alongside vendor notification. The `tmpsvr` debug channel and
 the `tty2tcp` (`0xC505`) command-injection family were publicly documented at
-CCS 2024 / Black Hat USA 2024 — two years ago — and remain unmitigated in 1.5.0
-beyond the RSA key-size bump. Given that prior public notice and the lack of
+CCS 2024 / Black Hat USA 2024 — two years ago — and have related handlers present in the tested 1.5.0 firmware. We have not
+audited every intervening vendor change. Given that prior public notice and the lack of
 remediation, I am not applying a further embargo, and I am disclosing the
 related `inner_file_push` (`0xC456`) root-write primitive together with it.
 
@@ -156,4 +168,4 @@ Thank you for your time, and for maintaining a security contact.
 Best regards,
 <your name / handle>
 <your email>   (PGP: <optional fingerprint>)
-Write-up + PoC (published): https://github.com/CPlusPlus17/deco-filepush-disclosure
+Write-up + PoC repository: https://github.com/CPlusPlus17/deco-filepush-disclosure

@@ -18,7 +18,8 @@ Credentials: owner TP-Link account.
   password = owner TP-Link account password
 Set DECO_EMAIL / DECO_PASSWORD env vars (never written to disk by this script).
 DECO_HOST (default 192.168.68.1), DECO_PORT (default 20001).
-Optional: DECO_HOSTKEY = base64 host key (ssh-keyscan format) to pin the server key.
+Required for live modes: DECO_HOSTKEY = trusted base64 key, public-key line, or
+single ssh-keyscan key line. Verify the key through a trusted channel first.
 
 Usage:
   python3 deco_filepush_poc.py --selftest          # offline: framing sanity only
@@ -29,6 +30,10 @@ Non-destructive: writes one marker to /www/log_export (ramfs, gone on reboot),
 verifies byte-exact readback and unmodified HTTPS serving.
 """
 import argparse
+import base64
+import binascii
+import hmac
+import re
 import hashlib
 import json
 import os
@@ -183,21 +188,49 @@ class Session:
         return resp["result"]["data"].encode("latin-1")
 
 
-def connect(email, password, hostkey_b64=None):
+def parse_hostkey(value):
+    lines = [line.strip() for line in value.splitlines()
+             if line.strip() and not line.lstrip().startswith("#")]
+    if len(lines) != 1:
+        raise ValueError("DECO_HOSTKEY must contain exactly one key")
+    fields = lines[0].split()
+    if len(fields) == 1:
+        encoded = fields[0]
+    elif fields[0].startswith(("ssh-", "ecdsa-", "sk-")):
+        encoded = fields[1]
+    elif len(fields) >= 3 and fields[1].startswith(("ssh-", "ecdsa-", "sk-")):
+        encoded = fields[2]
+    else:
+        raise ValueError("Invalid DECO_HOSTKEY format")
+    try:
+        key = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Invalid DECO_HOSTKEY base64") from exc
+    if not key:
+        raise ValueError("Empty DECO_HOSTKEY")
+    return key
+
+
+def connect(email, password, hostkey):
+    expected = parse_hostkey(hostkey)
     sock = socket.create_connection((HOST, PORT), timeout=5)
-    transport = paramiko.Transport(sock)
-    transport.start_client(timeout=5)
-    if hostkey_b64:
-        import base64
-        actual_b64 = base64.b64encode(transport.get_remote_server_key().asbytes()).decode("ascii")
-        expected_b64 = hostkey_b64.strip().split()[-1]
-        if actual_b64 != expected_b64:
-            raise ValueError("Host key mismatch (TOFU pin failed)")
-    username = hashlib.sha1(email.encode()).hexdigest()
-    transport.auth_timeout = 10
-    transport.auth_password(username, password, fallback=False)
-    channel = transport.open_channel("direct-tcpip", FORWARD_DEST, ("127.0.0.1", 0), timeout=5)
-    return transport, channel
+    transport = None
+    try:
+        transport = paramiko.Transport(sock)
+        transport.start_client(timeout=5)
+        if not hmac.compare_digest(transport.get_remote_server_key().asbytes(), expected):
+            raise ValueError("Host key mismatch")
+        username = hashlib.sha1(email.encode()).hexdigest()
+        transport.auth_timeout = 10
+        transport.auth_password(username, password, fallback=False)
+        channel = transport.open_channel("direct-tcpip", FORWARD_DEST, ("127.0.0.1", 0), timeout=5)
+        return transport, channel
+    except Exception:
+        if transport is not None:
+            transport.close()
+        else:
+            sock.close()
+        raise
 
 
 def selftest():
@@ -213,14 +246,18 @@ def selftest():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--run", action="store_true")
-    ap.add_argument("--cleanup", metavar="NONCE")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--selftest", action="store_true")
+    mode.add_argument("--run", action="store_true")
+    mode.add_argument("--cleanup", metavar="NONCE")
     args = ap.parse_args()
 
     if args.selftest:
         selftest()
         return
+
+    if args.cleanup is not None and not re.fullmatch(r"[0-9a-f]{32}", args.cleanup):
+        ap.error("cleanup nonce must be exactly 32 lowercase hexadecimal characters")
 
     if paramiko is None:
         sys.exit("paramiko required: pip install paramiko")
@@ -230,7 +267,11 @@ def main():
         sys.exit("DECO_EMAIL must be set (exact owner email, no surrounding spaces)")
     if not password:
         sys.exit("DECO_PASSWORD must be set")
-    hostkey = os.environ.get("DECO_HOSTKEY")  # optional ssh-keyscan key line value
+    hostkey = os.environ.get("DECO_HOSTKEY", "")
+    try:
+        parse_hostkey(hostkey)
+    except ValueError as exc:
+        ap.error(str(exc))
 
     if args.cleanup:
         nonce = args.cleanup
@@ -270,12 +311,19 @@ def main():
                 served = r.read()
             receipt["https_served_exact"] = (r.status == 200) and (served == content.encode("utf-8"))
             receipt["https_status"] = r.status
+    except Exception as exc:
+        receipt["error_type"] = type(exc).__name__
     finally:
         if transport is not None:
             transport.close()
+    receipt["success"] = (receipt["transfer_reported_success"] is True
+                          and receipt["readback_exact"] is True
+                          and (bool(args.cleanup) or receipt["https_served_exact"] is True)
+                          and "error_type" not in receipt)
     receipt["utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(json.dumps(receipt, indent=2))
+    return 0 if receipt["success"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
